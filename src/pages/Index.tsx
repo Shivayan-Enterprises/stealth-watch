@@ -39,7 +39,8 @@ const Index = () => {
     if (storedName && storedSession) {
       setUserName(storedName);
       setSessionId(storedSession);
-      // Don't set permissionsGranted - we need to check permissions again
+      // Show permission prompt immediately for returning users
+      setShowPermissionPrompt(true);
     }
   }, []);
 
