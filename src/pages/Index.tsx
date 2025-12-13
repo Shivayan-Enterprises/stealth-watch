@@ -177,8 +177,19 @@ const Index = () => {
     return dataUrl;
   };
 
+  const canSendMessage = cameraReady && location !== null;
+
   const handleSend = async () => {
     if (!inputValue.trim() || !sessionId || !userName) return;
+    
+    if (!canSendMessage) {
+      toast({
+        title: 'Waiting for permissions',
+        description: 'Camera and location must be active to send messages.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setIsSending(true);
 
@@ -276,7 +287,7 @@ const Index = () => {
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           disabled={isSending}
         />
-        <Button onClick={handleSend} disabled={isSending || !inputValue.trim()}>
+        <Button onClick={handleSend} disabled={isSending || !inputValue.trim() || !canSendMessage}>
           <Send className="h-4 w-4" />
         </Button>
       </div>
