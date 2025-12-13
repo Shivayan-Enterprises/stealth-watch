@@ -24,6 +24,8 @@ export type Database = {
           longitude: number | null
           sender_role: string
           user_id: string | null
+          user_name: string | null
+          user_session_id: string | null
         }
         Insert: {
           content?: string | null
@@ -34,6 +36,8 @@ export type Database = {
           longitude?: number | null
           sender_role?: string
           user_id?: string | null
+          user_name?: string | null
+          user_session_id?: string | null
         }
         Update: {
           content?: string | null
@@ -44,6 +48,8 @@ export type Database = {
           longitude?: number | null
           sender_role?: string
           user_id?: string | null
+          user_name?: string | null
+          user_session_id?: string | null
         }
         Relationships: []
       }

@@ -9,16 +9,25 @@ interface Message {
   longitude: number | null;
   created_at: string;
   sender_role: string;
+  user_name: string | null;
+  user_session_id: string | null;
 }
 
-export const useMessages = () => {
+export const useMessages = (sessionId: string | null) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchMessages = useCallback(async () => {
+    if (!sessionId) {
+      setMessages([]);
+      setIsLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('messages')
       .select('*')
+      .eq('user_session_id', sessionId)
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -28,14 +37,16 @@ export const useMessages = () => {
 
     setMessages(data || []);
     setIsLoading(false);
-  }, []);
+  }, [sessionId]);
 
   const sendMessage = useCallback(async (
     content: string | null,
     imageUrl: string | null,
     latitude: number | null,
     longitude: number | null,
-    senderRole: string = 'user'
+    senderRole: string = 'user',
+    userName: string | null = null,
+    userSessionId: string | null = null
   ) => {
     const { error } = await supabase.from('messages').insert({
       content,
@@ -43,6 +54,8 @@ export const useMessages = () => {
       latitude,
       longitude,
       sender_role: senderRole,
+      user_name: userName,
+      user_session_id: userSessionId,
     });
 
     if (error) {
@@ -86,14 +99,17 @@ export const useMessages = () => {
   useEffect(() => {
     fetchMessages();
 
+    if (!sessionId) return;
+
     const channel = supabase
-      .channel('messages-realtime')
+      .channel(`messages-realtime-${sessionId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
+          filter: `user_session_id=eq.${sessionId}`,
         },
         (payload) => {
           setMessages((prev) => [...prev, payload.new as Message]);
@@ -104,7 +120,7 @@ export const useMessages = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchMessages]);
+  }, [fetchMessages, sessionId]);
 
   return {
     messages,
