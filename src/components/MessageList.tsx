@@ -46,13 +46,6 @@ const MessageList = ({ messages, isLoading }: MessageListProps) => {
           key={message.id}
           className="bg-card rounded-lg p-3 shadow-sm border"
         >
-          {message.image_url && (
-            <img
-              src={message.image_url}
-              alt="Chat"
-              className="rounded-lg w-full max-w-xs mb-2"
-            />
-          )}
           
           {message.content && (
             <p className="text-foreground">{message.content}</p>
