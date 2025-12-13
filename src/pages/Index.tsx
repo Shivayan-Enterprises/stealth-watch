@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPin, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 import CameraView from '@/components/CameraView';
 import MessageList from '@/components/MessageList';
 import ChatInput from '@/components/ChatInput';
@@ -13,9 +14,11 @@ const Index = () => {
   const { location, error: locationError } = useLocation();
   const [isSending, setIsSending] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(true);
 
   const handleCapture = (imageData: string) => {
     setCapturedImage(imageData);
+    setShowCamera(false);
     toast({
       title: 'Photo captured!',
       description: 'Add a message and send.',
@@ -49,6 +52,7 @@ const Index = () => {
 
     if (success) {
       setCapturedImage(null);
+      setShowCamera(false);
       toast({ title: 'Message sent!' });
     } else {
       toast({
@@ -63,22 +67,36 @@ const Index = () => {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <header className="p-4 border-b">
-        <h1 className="text-xl font-bold text-foreground">Live Chat</h1>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-          <MapPin className="h-3 w-3" />
-          {location ? (
-            <span>{location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</span>
-          ) : locationError ? (
-            <span>Location unavailable</span>
-          ) : (
-            <span>Getting location...</span>
-          )}
+      <header className="p-4 border-b flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Live Chat</h1>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+            <MapPin className="h-3 w-3" />
+            {location ? (
+              <span>{location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}</span>
+            ) : locationError ? (
+              <span>Location unavailable</span>
+            ) : (
+              <span>Getting location...</span>
+            )}
+          </div>
         </div>
+        {!showCamera && !capturedImage && (
+          <Button variant="outline" size="sm" onClick={() => setShowCamera(true)}>
+            <Camera className="h-4 w-4 mr-2" />
+            Open Camera
+          </Button>
+        )}
       </header>
 
-      <div className="p-4">
-        {capturedImage ? (
+      {showCamera && !capturedImage && (
+        <div className="p-4">
+          <CameraView onCapture={handleCapture} />
+        </div>
+      )}
+
+      {capturedImage && (
+        <div className="p-4">
           <div className="relative">
             <img src={capturedImage} alt="Captured" className="w-full h-48 object-cover rounded-lg" />
             <button
@@ -88,10 +106,8 @@ const Index = () => {
               ×
             </button>
           </div>
-        ) : (
-          <CameraView onCapture={handleCapture} />
-        )}
-      </div>
+        </div>
+      )}
 
       <MessageList messages={messages} isLoading={isLoading} />
 
