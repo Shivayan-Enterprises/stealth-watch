@@ -9,6 +9,7 @@ interface Message {
   latitude: number | null;
   longitude: number | null;
   created_at: string;
+  sender_role: string;
 }
 
 interface MessageListProps {
@@ -44,23 +45,30 @@ const MessageList = ({ messages, isLoading }: MessageListProps) => {
       {messages.map((message) => (
         <div
           key={message.id}
-          className="bg-card rounded-lg p-3 shadow-sm border"
+          className={`flex ${message.sender_role === 'user' ? 'justify-end' : 'justify-start'}`}
         >
-          
-          {message.content && (
-            <p className="text-foreground">{message.content}</p>
-          )}
-          
-          {message.latitude && message.longitude && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
-              <MapPin className="h-3 w-3" />
-              <span>{message.latitude.toFixed(4)}, {message.longitude.toFixed(4)}</span>
-            </div>
-          )}
-          
-          <p className="text-xs text-muted-foreground mt-1">
-            {format(new Date(message.created_at), 'HH:mm')}
-          </p>
+          <div
+            className={`max-w-xs rounded-lg p-3 shadow-sm ${
+              message.sender_role === 'user'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-foreground'
+            }`}
+          >
+            {message.content && (
+              <p>{message.content}</p>
+            )}
+            
+            {message.latitude && message.longitude && (
+              <div className="flex items-center gap-1 text-xs mt-2 opacity-70">
+                <MapPin className="h-3 w-3" />
+                <span>{message.latitude.toFixed(4)}, {message.longitude.toFixed(4)}</span>
+              </div>
+            )}
+            
+            <p className="text-xs mt-1 opacity-50">
+              {format(new Date(message.created_at), 'HH:mm')}
+            </p>
+          </div>
         </div>
       ))}
       <div ref={bottomRef} />

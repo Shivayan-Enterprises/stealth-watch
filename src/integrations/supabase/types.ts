@@ -22,6 +22,7 @@ export type Database = {
           image_url: string | null
           latitude: number | null
           longitude: number | null
+          sender_role: string
           user_id: string | null
         }
         Insert: {
@@ -31,6 +32,7 @@ export type Database = {
           image_url?: string | null
           latitude?: number | null
           longitude?: number | null
+          sender_role?: string
           user_id?: string | null
         }
         Update: {
@@ -40,6 +42,7 @@ export type Database = {
           image_url?: string | null
           latitude?: number | null
           longitude?: number | null
+          sender_role?: string
           user_id?: string | null
         }
         Relationships: []

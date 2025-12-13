@@ -8,6 +8,7 @@ interface Message {
   latitude: number | null;
   longitude: number | null;
   created_at: string;
+  sender_role: string;
 }
 
 export const useMessages = () => {
@@ -33,13 +34,15 @@ export const useMessages = () => {
     content: string | null,
     imageUrl: string | null,
     latitude: number | null,
-    longitude: number | null
+    longitude: number | null,
+    senderRole: string = 'user'
   ) => {
     const { error } = await supabase.from('messages').insert({
       content,
       image_url: imageUrl,
       latitude,
       longitude,
+      sender_role: senderRole,
     });
 
     if (error) {
