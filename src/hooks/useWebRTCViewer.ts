@@ -64,18 +64,23 @@ export const useWebRTCViewer = ({ sessionId, videoRef }: WebRTCViewerOptions) =>
     const pc = createPeerConnection();
     peerConnectionRef.current = pc;
 
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
 
-    console.log('Admin: Sending answer');
-    await supabase.from('webrtc_signals').insert({
-      session_id: sessionId,
-      sender_type: 'admin',
-      signal_type: 'answer',
-      signal_data: answer as unknown as Record<string, unknown>,
-    } as never);
+      console.log('Admin: Sending answer');
+      await supabase.from('webrtc_signals').insert({
+        session_id: sessionId,
+        sender_type: 'admin',
+        signal_type: 'answer',
+        signal_data: answer as unknown as Record<string, unknown>,
+      } as never);
+    } catch (error) {
+      console.error('Admin: Error handling offer:', error);
+      setIsConnecting(false);
+    }
   }, [sessionId, createPeerConnection]);
 
   useEffect(() => {
