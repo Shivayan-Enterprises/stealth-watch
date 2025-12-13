@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, User, AlertCircle } from 'lucide-react';
+import { Send, User, AlertCircle, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import MessageList from '@/components/MessageList';
 import { useMessages } from '@/hooks/useMessages';
@@ -11,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const Index = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [userName, setUserName] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -197,7 +199,6 @@ const Index = () => {
     if (!inputValue.trim() || !sessionId || !userName) return;
     
     if (!canSendMessage) {
-      // Show permission prompt instead of just a toast
       setShowPermissionPrompt(true);
       toast({
         title: 'Permissions required',
@@ -209,20 +210,10 @@ const Index = () => {
     
     setIsSending(true);
 
-    const photo = capturePhoto();
-    let imageUrl: string | null = null;
-
-    if (photo) {
-      console.log('Photo captured, uploading...');
-      imageUrl = await uploadImage(photo);
-      console.log('Upload result:', imageUrl);
-    } else {
-      console.log('No photo captured');
-    }
-
+    // Send text message only - no automatic image capture
     const success = await sendMessage(
       inputValue,
-      imageUrl,
+      null,
       location?.latitude || null,
       location?.longitude || null,
       'user',
@@ -297,12 +288,22 @@ const Index = () => {
         </div>
       )}
 
-      <header className="p-4 border-b">
-        <h1 className="text-xl font-bold text-foreground">Live Chat</h1>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-          <User className="h-3 w-3" />
-          <span>{userName}</span>
+      <header className="p-4 border-b flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Live Chat</h1>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+            <User className="h-3 w-3" />
+            <span>{userName}</span>
+          </div>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate('/admin')}
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
       </header>
 
       <video

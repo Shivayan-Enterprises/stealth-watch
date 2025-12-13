@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, Send, Lock, Users, ArrowLeft, Video, VideoOff } from 'lucide-react';
+import { MapPin, Send, Lock, Users, ArrowLeft, Video, VideoOff, Camera } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useWebRTCViewer } from '@/hooks/useWebRTCViewer';
+import { useMessages } from '@/hooks/useMessages';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -39,14 +40,72 @@ const Admin = () => {
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showVideo, setShowVideo] = useState(true);
+  const [isCapturing, setIsCapturing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // Use messages hook for uploading captured photos
+  const { uploadImage } = useMessages(selectedSession);
   
   // WebRTC viewer for live video from user
   const { isConnected: videoConnected, isConnecting: videoConnecting } = useWebRTCViewer({
     sessionId: selectedSession,
     videoRef,
   });
+
+  // Capture photo from video preview
+  const capturePhoto = async () => {
+    if (!videoRef.current || !videoConnected || !selectedSession) {
+      toast({
+        title: 'Cannot capture',
+        description: 'Video feed not available',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsCapturing(true);
+    
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      ctx.drawImage(video, 0, 0);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      
+      // Upload the captured image
+      const imageUrl = await uploadImage(dataUrl);
+      
+      if (imageUrl) {
+        // Send as admin message with captured photo
+        await supabase.from('messages').insert({
+          content: '📸 Photo captured',
+          image_url: imageUrl,
+          sender_role: 'admin',
+          user_session_id: selectedSession,
+          user_name: 'Admin',
+        });
+        
+        toast({
+          title: 'Photo captured',
+          description: 'Photo has been saved and sent',
+        });
+      }
+    } catch (error) {
+      console.error('Capture error:', error);
+      toast({
+        title: 'Capture failed',
+        variant: 'destructive',
+      });
+    }
+    
+    setIsCapturing(false);
+  };
 
   const handleLogin = () => {
     if (username === 'prathmesh' && password === 'pAS2905@') {
@@ -334,6 +393,17 @@ const Admin = () => {
                   </div>
                 )}
               </div>
+            )}
+            {/* Capture button overlay */}
+            {videoConnected && (
+              <Button
+                onClick={capturePhoto}
+                disabled={isCapturing}
+                className="absolute bottom-3 right-3 h-10 w-10 rounded-full bg-primary/90 hover:bg-primary shadow-lg"
+                size="icon"
+              >
+                <Camera className="h-5 w-5" />
+              </Button>
             )}
           </div>
         </div>
