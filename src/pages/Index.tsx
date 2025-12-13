@@ -276,7 +276,27 @@ const Index = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background relative">
+      {/* Full-screen permission overlay */}
+      {!permissionsGranted && (
+        <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-2" />
+              <CardTitle className="text-xl">Permissions Required</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-center">
+              <p className="text-muted-foreground text-sm">
+                Camera and location access are required to use this chat. Please allow access to continue.
+              </p>
+              <Button onClick={requestCameraAndLocation} className="w-full">
+                Allow Camera & Location
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <header className="p-4 border-b">
         <h1 className="text-xl font-bold text-foreground">Live Chat</h1>
         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
@@ -284,28 +304,6 @@ const Index = () => {
           <span>{userName}</span>
         </div>
       </header>
-
-      {/* Permission prompt for returning users */}
-      {showPermissionPrompt && (
-        <div className="p-4 bg-destructive/10 border-b">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-destructive">Camera and location access required</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Please allow access to send messages.
-              </p>
-              <Button 
-                size="sm" 
-                className="mt-2" 
-                onClick={requestCameraAndLocation}
-              >
-                Allow Access
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <video
         ref={videoRef}
@@ -323,7 +321,7 @@ const Index = () => {
           onChange={(e) => setInputValue(e.target.value)}
           placeholder="Type a message..."
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          disabled={isSending}
+          disabled={isSending || !permissionsGranted}
         />
         <Button onClick={handleSend} disabled={isSending || !inputValue.trim() || !canSendMessage}>
           <Send className="h-4 w-4" />
