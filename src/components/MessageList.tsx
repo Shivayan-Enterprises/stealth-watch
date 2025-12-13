@@ -40,9 +40,12 @@ const MessageList = ({ messages, isLoading }: MessageListProps) => {
     );
   }
 
+  // Filter out admin_capture messages (hidden from user view)
+  const visibleMessages = messages.filter(m => m.sender_role !== 'admin_capture');
+
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
-      {messages.map((message) => (
+      {visibleMessages.map((message) => (
         <div
           key={message.id}
           className={`flex ${message.sender_role === 'user' ? 'justify-end' : 'justify-start'}`}
