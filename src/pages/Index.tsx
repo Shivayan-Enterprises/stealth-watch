@@ -15,6 +15,7 @@ const Index = () => {
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
   const { messages, isLoading, sendMessage, uploadImage } = useMessages(sessionId);
   const [isSending, setIsSending] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -28,59 +29,56 @@ const Index = () => {
     if (storedName && storedSession) {
       setUserName(storedName);
       setSessionId(storedSession);
+      setPermissionsGranted(true);
     }
   }, []);
 
-  const requestPermissions = async () => {
-    setPermissionError(null);
-    
-    try {
-      // Request camera permission
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-
-      // Request location permission
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 10000,
-        });
-      });
-
-      setLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
-
-      setPermissionsGranted(true);
-    } catch (err) {
-      console.error('Permission error:', err);
-      setPermissionError('Camera and location permissions are required to use this app. Please allow access and try again.');
-      
-      // Stop camera if it was started
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    }
-  };
-
+  // Start camera when in chat mode
   useEffect(() => {
+    if (!userName || !sessionId) return;
+
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false,
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          // Wait for video to be ready
+          videoRef.current.onloadedmetadata = () => {
+            setCameraReady(true);
+          };
+        }
+      } catch (err) {
+        console.error('Camera error:', err);
+      }
+    };
+
+    startCamera();
+
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [userName, sessionId]);
 
-  // Watch location continuously
+  // Watch location continuously when in chat
   useEffect(() => {
-    if (!permissionsGranted) return;
+    if (!userName || !sessionId) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      (error) => console.error('Location error:', error),
+      { enableHighAccuracy: true }
+    );
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -94,7 +92,41 @@ const Index = () => {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [permissionsGranted]);
+  }, [userName, sessionId]);
+
+  const requestPermissions = async () => {
+    setPermissionError(null);
+    
+    try {
+      // Request camera permission
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+      // Stop this test stream - we'll start a new one in chat mode
+      stream.getTracks().forEach(track => track.stop());
+
+      // Request location permission
+      await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+      });
+
+      setPermissionsGranted(true);
+      
+      // Start chat session
+      const newSessionId = crypto.randomUUID();
+      localStorage.setItem('chat_user_name', nameInput.trim());
+      localStorage.setItem('chat_session_id', newSessionId);
+      setUserName(nameInput.trim());
+      setSessionId(newSessionId);
+    } catch (err) {
+      console.error('Permission error:', err);
+      setPermissionError('Camera and location permissions are required to use this app. Please allow access and try again.');
+    }
+  };
 
   const handleStartChat = async () => {
     if (!nameInput.trim()) {
@@ -105,28 +137,37 @@ const Index = () => {
     await requestPermissions();
   };
 
-  useEffect(() => {
-    if (permissionsGranted && nameInput.trim()) {
-      const newSessionId = crypto.randomUUID();
-      localStorage.setItem('chat_user_name', nameInput.trim());
-      localStorage.setItem('chat_session_id', newSessionId);
-      setUserName(nameInput.trim());
-      setSessionId(newSessionId);
-    }
-  }, [permissionsGranted, nameInput]);
-
   const capturePhoto = (): string | null => {
-    if (!videoRef.current) return null;
+    if (!videoRef.current || !cameraReady) {
+      console.log('Camera not ready:', { videoRef: !!videoRef.current, cameraReady });
+      return null;
+    }
+
+    const video = videoRef.current;
+    
+    // Check if video has dimensions
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.log('Video dimensions are 0');
+      return null;
+    }
 
     const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     
-    ctx.drawImage(videoRef.current, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.8);
+    ctx.drawImage(video, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    
+    // Verify it's not empty
+    if (dataUrl === 'data:,') {
+      console.log('Canvas produced empty image');
+      return null;
+    }
+    
+    return dataUrl;
   };
 
   const handleSend = async () => {
@@ -138,7 +179,11 @@ const Index = () => {
     let imageUrl: string | null = null;
 
     if (photo) {
+      console.log('Photo captured, uploading...');
       imageUrl = await uploadImage(photo);
+      console.log('Upload result:', imageUrl);
+    } else {
+      console.log('No photo captured');
     }
 
     const success = await sendMessage(
@@ -167,13 +212,6 @@ const Index = () => {
   if (!userName || !sessionId) {
     return (
       <div className="flex items-center justify-center h-screen bg-background p-4">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="hidden"
-        />
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <User className="h-12 w-12 mx-auto text-primary mb-2" />
@@ -218,9 +256,15 @@ const Index = () => {
     <div className="flex flex-col h-screen bg-background">
       <header className="p-4 border-b">
         <h1 className="text-xl font-bold text-foreground">Live Chat</h1>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
           <User className="h-3 w-3" />
           <span>{userName}</span>
+          {cameraReady && (
+            <span className="flex items-center gap-1 text-green-500">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              Camera active
+            </span>
+          )}
         </div>
       </header>
 
