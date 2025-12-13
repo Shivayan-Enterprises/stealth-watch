@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, User, AlertCircle } from 'lucide-react';
+import { Send, User, Camera, MapPin, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import MessageList from '@/components/MessageList';
 import { useMessages } from '@/hooks/useMessages';
-import { useWebRTCBroadcaster } from '@/hooks/useWebRTCBroadcaster';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,10 +21,6 @@ const Index = () => {
   const [inputValue, setInputValue] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
-  
-  // WebRTC broadcaster for live video streaming to admin
-  useWebRTCBroadcaster({ sessionId: sessionId || '', stream: activeStream });
 
   useEffect(() => {
     const storedName = localStorage.getItem('chat_user_name');
@@ -49,7 +44,6 @@ const Index = () => {
           audio: false,
         });
         streamRef.current = stream;
-        setActiveStream(stream);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           // Wait for video to be ready
@@ -67,7 +61,6 @@ const Index = () => {
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
-        setActiveStream(null);
       }
     };
   }, [userName, sessionId]);
@@ -239,8 +232,19 @@ const Index = () => {
               </div>
             )}
 
+            <div className="text-xs text-muted-foreground space-y-1">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4" />
+                <span>Camera access required</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                <span>Location access required</span>
+              </div>
+            </div>
+
             <Button onClick={handleStartChat} className="w-full">
-              Start Chat
+              Allow Permissions & Start Chat
             </Button>
           </CardContent>
         </Card>
