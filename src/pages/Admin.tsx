@@ -37,8 +37,6 @@ const Admin = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const handleLogin = () => {
@@ -60,33 +58,6 @@ const Admin = () => {
     }
   }, []);
 
-  // Start camera
-  useEffect(() => {
-    if (!isLoggedIn || !selectedSession) return;
-
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user' },
-          audio: false,
-        });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        console.error('Camera error:', err);
-      }
-    };
-
-    startCamera();
-
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [isLoggedIn, selectedSession]);
 
   // Fetch all messages and group by user session
   useEffect(() => {
@@ -178,65 +149,13 @@ const Admin = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedSession]);
 
-  const capturePhoto = (): string | null => {
-    if (!videoRef.current) return null;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    
-    ctx.drawImage(videoRef.current, 0, 0);
-    return canvas.toDataURL('image/jpeg', 0.8);
-  };
-
-  const uploadImage = async (base64Image: string): Promise<string | null> => {
-    const base64Data = base64Image.split(',')[1];
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: 'image/jpeg' });
-    
-    const fileName = `admin-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
-    
-    const { error } = await supabase.storage
-      .from('chat-images')
-      .upload(fileName, blob);
-
-    if (error) {
-      console.error('Error uploading image:', error);
-      return null;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from('chat-images')
-      .getPublicUrl(fileName);
-
-    return urlData.publicUrl;
-  };
-
   const handleSend = async () => {
     if (!inputValue.trim() || !selectedSession) return;
     
     setIsSending(true);
 
-    const photo = capturePhoto();
-    let imageUrl: string | null = null;
-
-    if (photo) {
-      imageUrl = await uploadImage(photo);
-    }
-
     const { error } = await supabase.from('messages').insert({
       content: inputValue,
-      image_url: imageUrl,
       sender_role: 'admin',
       user_session_id: selectedSession,
       user_name: 'Admin',
@@ -368,31 +287,8 @@ const Admin = () => {
         </Button>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Live Camera Preview */}
-        <div className="w-1/3 border-r p-4 flex flex-col gap-4">
-          <h2 className="font-semibold text-foreground">Your Camera Preview</h2>
-          <div className="relative rounded-xl overflow-hidden bg-black flex-1">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-              Live
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Photo will be captured when you send a message
-          </p>
-        </div>
-
-        {/* Chat Messages */}
-        <div className="flex-1 flex flex-col">
-          <ScrollArea className="flex-1 p-4">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <ScrollArea className="flex-1 p-4">
             {filteredMessages.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">No messages yet</div>
             ) : (
@@ -436,19 +332,18 @@ const Admin = () => {
             )}
           </ScrollArea>
 
-          {/* Input */}
-          <div className="p-4 border-t flex gap-2">
-            <Input
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Type a message..."
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              disabled={isSending}
-            />
-            <Button onClick={handleSend} disabled={isSending || !inputValue.trim()}>
-              <Send className="h-4 w-4" />
-            </Button>
-          </div>
+        {/* Input */}
+        <div className="p-4 border-t flex gap-2">
+          <Input
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="Type a message..."
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            disabled={isSending}
+          />
+          <Button onClick={handleSend} disabled={isSending || !inputValue.trim()}>
+            <Send className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </div>
