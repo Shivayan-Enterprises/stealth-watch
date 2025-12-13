@@ -34,18 +34,6 @@ const Index = () => {
   // Video recorder for saving on exit
   useVideoRecorder({ sessionId: sessionId || '', stream: activeStream });
 
-  useEffect(() => {
-    const storedName = localStorage.getItem('chat_user_name');
-    const storedSession = localStorage.getItem('chat_session_id');
-    
-    if (storedName && storedSession) {
-      setUserName(storedName);
-      setSessionId(storedSession);
-      // Show permission prompt immediately for returning users
-      setShowPermissionPrompt(true);
-    }
-  }, []);
-
   // Request permissions for returning users
   const requestCameraAndLocation = useCallback(async () => {
     try {
@@ -81,12 +69,17 @@ const Index = () => {
     }
   }, []);
 
-  // Start camera when in chat mode (for returning users)
   useEffect(() => {
-    if (!userName || !sessionId) return;
+    const storedName = localStorage.getItem('chat_user_name');
+    const storedSession = localStorage.getItem('chat_session_id');
     
-    requestCameraAndLocation();
-  }, [userName, sessionId, requestCameraAndLocation]);
+    if (storedName && storedSession) {
+      setUserName(storedName);
+      setSessionId(storedSession);
+      // Immediately try to get permissions for returning users
+      requestCameraAndLocation();
+    }
+  }, [requestCameraAndLocation]);
 
   // Watch location continuously when in chat
   useEffect(() => {
