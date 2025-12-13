@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { MapPin, Send, Lock, Users, ArrowLeft } from 'lucide-react';
+import { MapPin, Send, Lock, Users, ArrowLeft, Video, VideoOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useWebRTCViewer } from '@/hooks/useWebRTCViewer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -37,7 +38,15 @@ const Admin = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [showVideo, setShowVideo] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // WebRTC viewer for live video from user
+  const { isConnected: videoConnected, isConnecting: videoConnecting } = useWebRTCViewer({
+    sessionId: selectedSession,
+    videoRef,
+  });
 
   const handleLogin = () => {
     if (username === 'prathmesh' && password === 'pAS2905@') {
@@ -280,12 +289,55 @@ const Admin = () => {
         </Button>
         <div className="flex-1">
           <h1 className="text-lg font-bold">{selectedUser?.user_name}</h1>
-          <p className="text-xs opacity-80">Chat session</p>
+          <p className="text-xs opacity-80 flex items-center gap-1">
+            {videoConnecting ? (
+              <>Connecting video...</>
+            ) : videoConnected ? (
+              <><Video className="h-3 w-3" /> Live video connected</>
+            ) : (
+              <><VideoOff className="h-3 w-3" /> Waiting for video...</>
+            )}
+          </p>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowVideo(!showVideo)}
+          className="text-primary-foreground"
+        >
+          {showVideo ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+        </Button>
         <Button variant="ghost" onClick={handleLogout} className="text-primary-foreground">
           Logout
         </Button>
       </header>
+
+      {/* Live Video Preview */}
+      {showVideo && (
+        <div className="p-4 bg-muted/50 border-b">
+          <div className="relative aspect-video max-w-sm mx-auto bg-black rounded-lg overflow-hidden">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+            {!videoConnected && (
+              <div className="absolute inset-0 flex items-center justify-center text-white/70">
+                {videoConnecting ? (
+                  <div className="animate-pulse">Connecting...</div>
+                ) : (
+                  <div className="text-center">
+                    <VideoOff className="h-8 w-8 mx-auto mb-2" />
+                    <p className="text-sm">Waiting for user's camera</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <ScrollArea className="flex-1 p-4">
