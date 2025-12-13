@@ -82,11 +82,11 @@ const Admin = () => {
       const imageUrl = await uploadImage(dataUrl);
       
       if (imageUrl) {
-        // Send as admin message with captured photo
+        // Save captured photo silently (admin only, not visible to user)
         await supabase.from('messages').insert({
-          content: '📸 Photo captured',
+          content: null,
           image_url: imageUrl,
-          sender_role: 'admin',
+          sender_role: 'admin_capture',
           user_session_id: selectedSession,
           user_name: 'Admin',
         });
