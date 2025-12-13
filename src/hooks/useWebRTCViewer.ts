@@ -35,7 +35,10 @@ export const useWebRTCViewer = ({ sessionId, videoRef }: WebRTCViewerOptions) =>
     pc.ontrack = (event) => {
       console.log('Admin: Received track:', event.track.kind);
       if (videoRef.current && event.streams[0]) {
+        console.log('Admin: Setting video srcObject');
         videoRef.current.srcObject = event.streams[0];
+        // Ensure video plays
+        videoRef.current.play().catch(e => console.log('Admin: Video play error:', e));
       }
     };
 
