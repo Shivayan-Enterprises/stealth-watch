@@ -96,19 +96,13 @@ const Index = () => {
         </div>
       </header>
 
-      <div className="relative mx-4 mt-2 rounded-xl overflow-hidden bg-black">
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-48 object-cover"
-        />
-        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          Live
-        </div>
-      </div>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="hidden"
+      />
 
       <MessageList messages={messages} isLoading={isLoading} />
 
