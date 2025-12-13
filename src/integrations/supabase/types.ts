@@ -53,6 +53,33 @@ export type Database = {
         }
         Relationships: []
       }
+      webrtc_signals: {
+        Row: {
+          created_at: string
+          id: string
+          sender_type: string
+          session_id: string
+          signal_data: Json
+          signal_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          sender_type: string
+          session_id: string
+          signal_data: Json
+          signal_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          sender_type?: string
+          session_id?: string
+          signal_data?: Json
+          signal_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
