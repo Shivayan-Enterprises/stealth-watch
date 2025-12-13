@@ -101,7 +101,7 @@ const Index = () => {
         autoPlay
         playsInline
         muted
-        className="w-full h-32 object-cover"
+        className="hidden"
       />
 
       <MessageList messages={messages} isLoading={isLoading} />
