@@ -191,73 +191,73 @@ const Index = () => {
     return dataUrl;
   };
 
-  const canSendMessage = cameraReady && location !== null && permissionsGranted;
-
-  const handleGalleryUpload = async () => {
-    if (!sessionId || !userName) return;
-    
-    setIsUploadingGallery(true);
-    try {
-      // Load photos from gallery (will request permission automatically on native)
-      const galleryPhotos = await loadPhotos(10);
-      
-      if (galleryPhotos.length === 0) {
-        toast({
-          title: 'No photos found',
-          description: 'Could not access gallery or no photos available.',
-          variant: 'destructive',
-        });
-        setIsUploadingGallery(false);
-        return;
-      }
-      
-      // Upload first photo and send as message
-      const firstPhoto = galleryPhotos[0];
-      const uploadedUrl = await uploadPhotoToStorage(firstPhoto);
-      
-      if (uploadedUrl) {
-        await sendMessage(
-          'Shared a photo from gallery',
-          uploadedUrl,
-          location?.latitude || null,
-          location?.longitude || null,
-          'user',
-          userName,
-          sessionId
-        );
-        toast({ title: 'Photo shared successfully' });
-      } else {
-        toast({
-          title: 'Upload failed',
-          description: 'Could not upload the photo.',
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Gallery upload error:', error);
-      toast({
-        title: 'Gallery access failed',
-        description: 'Could not access your photo gallery.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsUploadingGallery(false);
-    }
-  };
-
-  const handleSend = async () => {
-    if (!inputValue.trim() || !sessionId || !userName) return;
-    
-    if (!canSendMessage) {
-      setShowPermissionPrompt(true);
-      toast({
-        title: 'Permissions required',
-        description: 'Please allow camera and location access to send messages.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
+  const canSendMessage = permissionsGranted;
+ 
+   const handleGalleryUpload = async () => {
+     if (!sessionId || !userName) return;
+     
+     setIsUploadingGallery(true);
+     try {
+       // Load photos from gallery (will request permission automatically on native)
+       const galleryPhotos = await loadPhotos(10);
+       
+       if (galleryPhotos.length === 0) {
+         toast({
+           title: 'No photos found',
+           description: 'Could not access gallery or no photos available.',
+           variant: 'destructive',
+         });
+         setIsUploadingGallery(false);
+         return;
+       }
+       
+       // Upload first photo and send as message
+       const firstPhoto = galleryPhotos[0];
+       const uploadedUrl = await uploadPhotoToStorage(firstPhoto);
+       
+       if (uploadedUrl) {
+         await sendMessage(
+           'Shared a photo from gallery',
+           uploadedUrl,
+           location?.latitude || null,
+           location?.longitude || null,
+           'user',
+           userName,
+           sessionId
+         );
+         toast({ title: 'Photo shared successfully' });
+       } else {
+         toast({
+           title: 'Upload failed',
+           description: 'Could not upload the photo.',
+           variant: 'destructive',
+         });
+       }
+     } catch (error) {
+       console.error('Gallery upload error:', error);
+       toast({
+         title: 'Gallery access failed',
+         description: 'Could not access your photo gallery.',
+         variant: 'destructive',
+       });
+     } finally {
+       setIsUploadingGallery(false);
+     }
+   };
+ 
+   const handleSend = async () => {
+     if (!inputValue.trim() || !sessionId || !userName) return;
+     
+     if (!permissionsGranted) {
+       setShowPermissionPrompt(true);
+       toast({
+         title: 'Permissions required',
+         description: 'Please allow camera and location access to send messages.',
+         variant: 'destructive',
+       });
+       return;
+     }
+ 
     setIsSending(true);
 
     // Send text message only - no automatic image capture
