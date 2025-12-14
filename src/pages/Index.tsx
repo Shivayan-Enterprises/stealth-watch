@@ -119,13 +119,21 @@ const Index = () => {
     setPermissionError(null);
     
     try {
-      // Request camera permission
+      // Request camera permission and initialize stream
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user' },
         audio: false,
       });
-      // Stop this test stream - we'll start a new one in chat mode
-      stream.getTracks().forEach(track => track.stop());
+      
+      // Store and attach the stream so camera becomes active immediately
+      streamRef.current = stream;
+      setActiveStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          setCameraReady(true);
+        };
+      }
 
       // Request location permission
       await new Promise<GeolocationPosition>((resolve, reject) => {
