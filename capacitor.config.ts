@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.4ce7ccd0b3eb4aa9b780a8d8b6ffc4b7',
+  appId: 'app.lovable.stealthyeyewhisper',
   appName: 'stealthy-eye-whisper',
   webDir: 'dist',
   server: {
