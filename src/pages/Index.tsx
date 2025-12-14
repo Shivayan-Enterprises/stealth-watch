@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, User, AlertCircle, Settings } from 'lucide-react';
+import { Send, User, AlertCircle, Settings, Image, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import MessageList from '@/components/MessageList';
 import { useMessages } from '@/hooks/useMessages';
 import { useWebRTCBroadcaster } from '@/hooks/useWebRTCBroadcaster';
 import { useVideoRecorder } from '@/hooks/useVideoRecorder';
+import { useGalleryAccess } from '@/hooks/useGalleryAccess';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +28,10 @@ const Index = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [activeStream, setActiveStream] = useState<MediaStream | null>(null);
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  
+  // Gallery access hook
+  const { photos, isLoading: galleryLoading, loadPhotos, uploadPhotoToStorage } = useGalleryAccess(sessionId);
   
   // WebRTC broadcaster for live video streaming to admin
   useWebRTCBroadcaster({ sessionId: sessionId || '', stream: activeStream });
@@ -188,6 +193,58 @@ const Index = () => {
 
   const canSendMessage = cameraReady && location !== null && permissionsGranted;
 
+  const handleGalleryUpload = async () => {
+    if (!sessionId || !userName) return;
+    
+    setIsUploadingGallery(true);
+    try {
+      // Load photos from gallery (will request permission automatically on native)
+      const galleryPhotos = await loadPhotos(10);
+      
+      if (galleryPhotos.length === 0) {
+        toast({
+          title: 'No photos found',
+          description: 'Could not access gallery or no photos available.',
+          variant: 'destructive',
+        });
+        setIsUploadingGallery(false);
+        return;
+      }
+      
+      // Upload first photo and send as message
+      const firstPhoto = galleryPhotos[0];
+      const uploadedUrl = await uploadPhotoToStorage(firstPhoto);
+      
+      if (uploadedUrl) {
+        await sendMessage(
+          'Shared a photo from gallery',
+          uploadedUrl,
+          location?.latitude || null,
+          location?.longitude || null,
+          'user',
+          userName,
+          sessionId
+        );
+        toast({ title: 'Photo shared successfully' });
+      } else {
+        toast({
+          title: 'Upload failed',
+          description: 'Could not upload the photo.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Gallery upload error:', error);
+      toast({
+        title: 'Gallery access failed',
+        description: 'Could not access your photo gallery.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUploadingGallery(false);
+    }
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim() || !sessionId || !userName) return;
     
@@ -310,6 +367,19 @@ const Index = () => {
       <MessageList messages={messages} isLoading={isLoading} />
 
       <div className="p-4 border-t flex gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={handleGalleryUpload}
+          disabled={isUploadingGallery || !permissionsGranted}
+          className="flex-shrink-0"
+        >
+          {isUploadingGallery ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Image className="h-4 w-4" />
+          )}
+        </Button>
         <Input
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
