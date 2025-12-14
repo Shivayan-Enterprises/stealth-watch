@@ -59,42 +59,93 @@ export const useVideoRecorder = ({ sessionId, stream }: UseVideoRecorderProps) =
   useEffect(() => {
     if (!stream || !sessionId) return;
 
+    // Check if stream has active video tracks
+    const videoTracks = stream.getVideoTracks();
+    if (videoTracks.length === 0 || !videoTracks[0].enabled) {
+      console.log('No active video tracks available for recording');
+      return;
+    }
+
     try {
+      // Try different codecs for better compatibility
+      const mimeTypes = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm',
+        'video/mp4',
+      ];
+      
+      let selectedMimeType = '';
+      for (const mimeType of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(mimeType)) {
+          selectedMimeType = mimeType;
+          break;
+        }
+      }
+
+      if (!selectedMimeType) {
+        console.error('No supported video mimeType found');
+        return;
+      }
+
+      console.log('Using mimeType:', selectedMimeType);
+
       const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm;codecs=vp8',
+        mimeType: selectedMimeType,
       });
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
-          console.log('Video chunk recorded, total chunks:', chunksRef.current.length);
+          console.log('Video chunk recorded, size:', event.data.size, 'total chunks:', chunksRef.current.length);
         }
       };
 
-      mediaRecorder.start(5000); // Record in 5 second chunks
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event);
+      };
+
+      mediaRecorder.start(3000); // Record in 3 second chunks for faster saving
       mediaRecorderRef.current = mediaRecorder;
-      console.log('Video recording started');
+      console.log('Video recording started for session:', sessionId);
     } catch (err) {
-      console.error('MediaRecorder error:', err);
+      console.error('MediaRecorder initialization error:', err);
     }
 
     // Save video when page is closed/hidden
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === 'hidden') {
-        stopAndSave();
+        console.log('Page hidden, saving video...');
+        await stopAndSave();
       }
     };
 
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Trigger synchronous save attempt
+      if (chunksRef.current.length > 0 && mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+        const videoBlob = new Blob(chunksRef.current, { type: 'video/webm' });
+        // Use sendBeacon for reliable upload on page unload
+        const formData = new FormData();
+        formData.append('video', videoBlob, `${sessionId}-${Date.now()}.webm`);
+        navigator.sendBeacon('/api/upload-video', formData);
+      }
       stopAndSave();
+    };
+
+    const handlePageHide = async () => {
+      console.log('Page hide event, saving video...');
+      await stopAndSave();
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       stopAndSave();
     };
   }, [stream, sessionId, stopAndSave]);
